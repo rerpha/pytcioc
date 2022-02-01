@@ -34,6 +34,9 @@ class myDriver(Driver):
         )
         self.tid = None
         self.plc = plc
+        # todo start a thread here that either:
+        # - sets up callbacks for each read pv OR
+        # - polls every 0.5s with a "multiple ads var" query
 
     def read(self, reason):
         address, indexgrp, plctype = get_index_and_address(reason)
@@ -127,6 +130,7 @@ def get_ip(file_str: str) -> Tuple[str, int]:
 
 
 if __name__ == "__main__":
+    # todo we should generate this rather than rely on tcioc to do it
     with open("tc_project_app.db") as db_file:
         contents = db_file.read()
         plc_ip, plc_port = get_ip(contents)
