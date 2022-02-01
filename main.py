@@ -1,103 +1,104 @@
+from typing import Tuple
 from pcaspy import Driver, SimpleServer
 import pyads
-from time import sleep
+import threading
 
-prefix = ''
-pvdb = {
-
+prefix = ""
+pvdb = {}
+SCAN_SECONDS = 1
+epics_to_pcas_type_mapping = {
+    "bo": "int",
+    "longout": "int",
+    "ao": "int",
+    "mbbo": "enum",
+}
+epics_to_ads_type_mapping = {
+    "bo": pyads.PLCTYPE_BOOL,
+    "longout": pyads.PLCTYPE_INT,
+    "ao": pyads.PLCTYPE_LREAL,
+    "mbbo": "enum",
 }
 
 
-epics_to_pcas_type_mapping = {"bo": 'int', "longout": 'int', "ao": "int", "mbbo": "enum"}
-epics_to_ads_type_mapping = {"bo": pyads.PLCTYPE_BOOL, "longout": 'int', "ao": pyads.PLCTYPE_LREAL, "mbbo": "enum"}
+def get_index_and_address(reason):
+    indexgrp = int(pvdb[reason]["adsindex_group"])
+    address = int(pvdb[reason]["adsaddress"])
+    plctype = pvdb[reason]["adstype"]
+    return address, indexgrp, plctype
 
 
 class myDriver(Driver):
     def __init__(self, plc):
-        Driver.__init__(self,)
+        Driver.__init__(
+            self,
+        )
         self.tid = None
         self.plc = plc
 
-    # def read(self, reason):
-    #     return 1
-
     def read(self, reason):
-        print(f"read {reason}")
-        address, indexgrp = self.get_index_and_address(reason)
-        var = self.plc.read(indexgrp, address, plc_datatype=pyads.PLCTYPE_LREAL)
-        sleep(0.01)
-        if var:
-            print(f"{reason} is {var}")
+        address, indexgrp, plctype = get_index_and_address(reason)
+        try:
+            var = self.plc.read(indexgrp, address, plc_datatype=plctype)
             return var
-        return 1
-        # print(f"got {var} as the result")
-        # return 1
-        # return int(var)
+        except pyads.ADSError as e:
+            print(e)
 
-    def get_index_and_address(self, reason):
-        indexgrp = int(pvdb[reason]["adsindex_group"])
-        address = int(pvdb[reason]["adsaddress"])
-        plctype = pvdb[reason]["adstype"]
+    def write(self, reason, value):
+        status = True
+        # take proper actions
+        pv_name = reason
+        if not self.tid:
+            self.tid = threading.Thread(
+                target=self.write_to_beckhoff,
+                args=(
+                    pv_name,
+                    value,
+                ),
+            )
+            self.tid.start()
+        else:
+            status = False
+        # store the values
+        if status:
+            self.setParam(reason, value)
+        return status
 
-        return address, indexgrp
-
-    # def write(self, reason, value):
-    #     status = True
-    #     # take proper actions
-    #     pv_name = reason
-    #     if not self.tid:
-    #         self.tid = threading.Thread(target=self.write_to_beckhoff, args=(pv_name, value,))
-    #         self.tid.start()
-    #     else:
-    #         status = False
-    #     # store the values
-    #     if status:
-    #         self.setParam(reason, value)
-    #     return status
-
-    # def write_to_beckhoff(self, pv_name, ads_value):
-    #     # print("DEBUG: Run ", command)
-    #     # set status BUSY
-    #     self.setParam('STATUS', 1)
-    #     self.updatePVs()
-    #     # run shell
-    #     try:
-    #         address, indexgrp = self.get_index_and_address(pv_name)
-    #         var = self.plc.write(indexgrp, address, ads_value)
-    #     except OSError:
-    #         pass
-    #         # self.setParam('ERROR', str(sys.exc_info()[1]))
-    #         # self.setParam('OUTPUT', '')
-    #     else:
-    #         pass
-    #         # self.setParam('ERROR', proc.stderr.read().rstrip())
-    #         # self.setParam('OUTPUT', proc.stdout.read().rstrip())
-    #     self.callbackPV('COMMAND')
-    #     # set status DONE
-    #     self.setParam('STATUS', 0)
-    #     self.updatePVs()
-    #     self.tid = None
-    #     # print("DEBUG: Finish ", command)
+    def write_to_beckhoff(self, pv_name, ads_value):
+        self.updatePVs()
+        # run shell
+        try:
+            address, indexgrp, plctype = get_index_and_address(pv_name)
+            self.plc.write(indexgrp, address, ads_value, plctype)
+        except pyads.ADSError as e:
+            print(e)
+        self.updatePVs()
+        self.tid = None
 
 
-def generate_pvdb():
-    global read, PLC_IP, PLC_PORT
-    read = db_file.read()
-    records = read.split("}")
+def generate_pvdb(file_str: str):
+    records = file_str.split("}")
     for recorddef in records:
         index_group = ""
         address = ""
-        epicsdatatype = ""
         pvname = ""
-        pcasdatatype = ""
+        pcasdtype = ""
         ads_type = ""
-        lines = recorddef.lstrip("\n").replace("{", "").replace(" ", "").replace('"', "").replace("'", "").replace("\t",
-                                                                                                                   "").replace(
-            "field(", "").replace("record(", "").replace(")", "").split("\n")
+        lines = (
+            recorddef.lstrip("\n")
+            .replace("{", "")
+            .replace(" ", "")
+            .replace('"', "")
+            .replace("'", "")
+            .replace("\t", "")
+            .replace("field(", "")
+            .replace("record(", "")
+            .replace(")", "")
+            .split("\n")
+        )
         for line in lines:
             if line:
                 (key, value) = line.split(",")
-                if key in epics_to_pcas_type_mapping.keys():
+                if key in epics_to_pcas_type_mapping.keys() and key != "mbbo":
                     # this is the first line
                     epicsdatatype = key
                     pcasdtype = epics_to_pcas_type_mapping[epicsdatatype]
@@ -106,38 +107,38 @@ def generate_pvdb():
                 elif key == "OUT":
                     fqname = value.lstrip("@tc://")
                     split_addr = fqname.split("/")
-                    (PLC_IP, PLC_PORT) = split_addr[0].split(":")  # TODO find a better way to do this once
-                    index_group = split_addr[1]
+                    index_group = split_addr[1]  # index 0 is the ip:port
                     (address, data_size) = split_addr[2].split(":")
-        if "FACTP" in pvname:
+        if all([ads_type, index_group, address, pcasdtype]):
             pvdb[pvname] = {
                 "type": pcasdtype,
-                'scan': 1,
-                'asyn': True,
+                "scan": SCAN_SECONDS,
+                "asyn": True,
                 "adsindex_group": index_group,
-                'adsaddress': address,
-                "adstype": ads_type
-
+                "adsaddress": address,
+                "adstype": ads_type,
             }
 
-        # if any()
-        # pctype = i.str
+
+def get_ip(file_str: str) -> Tuple[str, int]:
+    test = file_str.split("@tc://")[1].split("/")[0]
+    (ip, port) = test.split(":")
+    return ip, int(port)
 
 
-if __name__ == '__main__':
-
-    PLC_IP = ""
-    PLC_PORT = 852
-
+if __name__ == "__main__":
     with open("tc_project_app.db") as db_file:
-        generate_pvdb()
+        contents = db_file.read()
+        plc_ip, plc_port = get_ip(contents)
+        generate_pvdb(contents)
 
-    ### This program takes a db file generated by tcioc (for now) and loads it into the db
-    plc = pyads.Connection(PLC_IP, int(PLC_PORT))
+    # This program takes a db file generated by tcioc (for now) and loads it into the db
+    plc = pyads.Connection(plc_ip, plc_port)
     plc.open()
 
     server = SimpleServer()
     server.createPV(prefix, pvdb)
+    print(f"created PVs: {pvdb.keys()}")
     driver = myDriver(plc)
 
     # process CA transactions
