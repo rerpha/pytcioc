@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 from constants import (
     SCAN_SECONDS,
@@ -7,20 +7,20 @@ from constants import (
 )
 
 
-def get_index_and_address(pvdb, reason):
+def get_index_and_address(pvdb: Dict, reason: str):
     indexgrp = pvdb[reason]["adsindex_group"]
     address = pvdb[reason]["adsaddress"]
     plctype = pvdb[reason]["adstype"]
     return address, indexgrp, plctype
 
 
-def generate_pvdb(pvdb, file_str: str):
+def generate_pvdb(pvdb: Dict, file_str: str):
     records = file_str.split("}")
     for record_def in records:
         index_group = ""
         address = ""
         pvname = ""
-        pcasdtype = ""
+        pcaspy_dtype = ""
         ads_type = ""
         lines = split_up_record_lines(record_def)
         for line in lines:
@@ -29,14 +29,14 @@ def generate_pvdb(pvdb, file_str: str):
                 key in epics_to_pcas_type_mapping.keys() and key != "mbbo"
             ):  # Todo handle enums.. if we need to?
                 # this is the first line therefore must contain the name
-                ads_type, pcasdtype = get_datatypes(key)
+                ads_type, pcaspy_dtype = get_datatypes(key)
                 pvname = value
             elif key == "OUT":
                 # this is the OUT field which specifies comms info
                 address, index_group = get_comms_info(value)
-        if all([ads_type, index_group, address, pcasdtype]):
+        if all([ads_type, index_group, address, pcaspy_dtype]):
             pvdb[pvname] = {
-                "type": pcasdtype,
+                "type": pcaspy_dtype,
                 "scan": SCAN_SECONDS,
                 "asyn": True,
                 "adsindex_group": index_group,
@@ -45,7 +45,7 @@ def generate_pvdb(pvdb, file_str: str):
             }
 
 
-def get_datatypes(epics_datatype):
+def get_datatypes(epics_datatype: str):
     pcasdtype = epics_to_pcas_type_mapping[epics_datatype]
     ads_type = epics_to_ads_type_mapping[epics_datatype]
     return ads_type, pcasdtype
@@ -87,7 +87,7 @@ def get_ip(file_str: str) -> Tuple[str, int]:
     return ip, int(port)
 
 
-def get_all_addresses(pvdb):
+def get_all_addresses(pvdb: Dict):
     for address, indexgrp, plctype in [
         get_index_and_address(pvdb, pvname) for pvname in pvdb.keys()
     ]:

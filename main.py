@@ -3,7 +3,6 @@ from utils import generate_pvdb, get_ip, get_index_and_address
 import threading
 import pyads
 
-prefix = ""
 pvdb = {}
 
 
@@ -14,10 +13,10 @@ class myDriver(Driver):
         )
         self.tid = None
         self.plc = plc
-        # todo start a thread here that either:
-        # - sets up callbacks for each read pv OR
-        # - polls every 0.5s with a "multiple ads var" query
-        # either of the above would be more efficient than polling every ADS var
+        # todo start a thread here that stores the pv values by either:
+        # - setting up callbacks for each read pv OR
+        # - polling every 0.5s with a "multiple ads var" query
+        # either of the above would be more efficient than polling every ADS var individually
 
     def read(self, reason):
         address, indexgrp, plctype = get_index_and_address(pvdb, reason)
@@ -70,10 +69,15 @@ with open("tc_project_app.db") as db_file:
 plc = pyads.Connection(plc_ip, plc_port)
 plc.open()
 
-# todo we should do this to allow this to work with tcioc https://github.com/ISISComputingGroup/EPICS-refl/blob/master/reflectometry_server.py
+# todo we should do this to allow this to work alongside tcioc using
+#  accesssecurity or a shared channelaccess
+#  https://github.com/ISISComputingGroup/EPICS-refl/blob/master/reflectometry_server.py
 server = SimpleServer()
+prefix = ""  # blank, as the prefix is already burned into the pv name by tcioc
 server.createPV(prefix, pvdb)
-print(f"created PVs: {pvdb.keys()}")
+print(f"created {len(pvdb)} PVs:")
+for pv in pvdb.keys():
+    print(pv)
 driver = myDriver(plc)
 
 # process CA transactions
