@@ -2,7 +2,7 @@ from typing import Tuple
 from pcaspy import Driver, SimpleServer
 import pyads
 import threading
-
+ADD_PREFIX = True
 prefix = ""
 pvdb = {}
 SCAN_SECONDS = 1
@@ -106,7 +106,7 @@ def generate_pvdb(file_str: str):
                     epicsdatatype = key
                     pcasdtype = epics_to_pcas_type_mapping[epicsdatatype]
                     ads_type = epics_to_ads_type_mapping[epicsdatatype]
-                    pvname = value
+                    pvname = value.replace("TC_01:", "PTC_01:") if ADD_PREFIX else value
                 elif key == "OUT":
                     fqname = value.lstrip("@tc://")
                     split_addr = fqname.split("/")
@@ -140,6 +140,8 @@ if __name__ == "__main__":
     plc = pyads.Connection(plc_ip, plc_port)
     plc.open()
 
+
+    #todo we should do this https://github.com/ISISComputingGroup/EPICS-refl/blob/master/reflectometry_server.py
     server = SimpleServer()
     server.createPV(prefix, pvdb)
     print(f"created PVs: {pvdb.keys()}")
