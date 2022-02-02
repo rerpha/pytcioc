@@ -21,10 +21,17 @@ class myDriver(Driver):
     def read(self, reason):
         address, indexgrp, plctype = get_index_and_address(pvdb, reason)
         try:
-            var = self.plc.read(indexgrp, address, plc_datatype=plctype)
-            return var
+            var = self._plc_read(address, indexgrp, plctype)
+            if var is not None:
+                return var
+            else:
+                print(f"no value received for {reason}: {var}")
         except pyads.ADSError as e:
             print(e)
+            return 0
+
+    def _plc_read(self, address, indexgrp, plctype):
+        return self.plc.read(indexgrp, address, plc_datatype=plctype)
 
     def write(self, reason, value):
         status = True
