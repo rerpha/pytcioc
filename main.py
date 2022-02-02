@@ -2,7 +2,7 @@ from pcaspy import SimpleServer, Driver
 from utils import generate_pvdb, get_ip, get_index_and_address
 import threading
 import pyads
-
+import logging
 pvdb = {}
 
 
@@ -15,7 +15,7 @@ class myDriver(Driver):
         self.plc = plc
         # todo start a thread here that stores the pv values by either:
         # - setting up callbacks for each read pv OR
-        # - polling every 0.5s with a "multiple ads var" query
+        # - polling every 0.5s with a "multiple ads var" query (CANNOT BE DONE CURRENTLY, PYADS ONLY ACCEPTS READMULT BY NAME NOT ADDRESS
         # either of the above would be more efficient than polling every ADS var individually
 
     def read(self, reason):
@@ -25,9 +25,9 @@ class myDriver(Driver):
             if var is not None:
                 return var
             else:
-                print(f"no value received for {reason}: {var}")
+                logging.error(f"no value received for {reason}: {var}")
         except pyads.ADSError as e:
-            print(e)
+            logging.error(e)
             return 0
 
     def _plc_read(self, address, indexgrp, plctype):
@@ -60,11 +60,12 @@ class myDriver(Driver):
             address, indexgrp, plctype = get_index_and_address(pvdb, pv_name)
             self.plc.write(indexgrp, address, ads_value, plctype)
         except pyads.ADSError as e:
-            print(e)
+            logging.error(e)
         self.updatePVs()
         self.tid = None
 
 
+logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s: %(message)s')
 # todo we should generate this rather than rely on tcioc to do it
 # todo get this from the macro instead
 with open("tc_project_app.db") as db_file:
@@ -82,9 +83,9 @@ plc.open()
 server = SimpleServer()
 prefix = ""  # blank, as the prefix is already burned into the pv name by tcioc
 server.createPV(prefix, pvdb)
-print(f"created {len(pvdb)} PVs:")
+logging.info(f"created {len(pvdb)} PVs:")
 for pv in pvdb.keys():
-    print(pv)
+    logging.info(pv)
 driver = myDriver(plc)
 
 # process CA transactions
