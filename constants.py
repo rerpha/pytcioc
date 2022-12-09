@@ -1,15 +1,30 @@
-import pyads
-
 SCAN_SECONDS = 1
-epics_to_pcas_type_mapping = {
-    "bo": "int",
-    "longout": "int",
-    "ao": "int",
-    "mbbo": "enum",
-}
-epics_to_ads_type_mapping = {
-    "bo": pyads.PLCTYPE_BOOL,
-    "longout": pyads.PLCTYPE_INT,
-    "ao": pyads.PLCTYPE_LREAL,
-    "mbbo": "enum",
+
+AXIS_STRUCT = {
+    "ASTAXES_{}:STCONTROL-BEXECUTE": None,
+    "ASTAXES_{}:STCONTROL-BRESET": None,
+    "ASTAXES_{}:STCONTROL-BSTOP": None,
+    "ASTAXES_{}:STCONTROL-BHALT": None,
+    "ASTAXES_{}:STCONTROL-BENABLE": None,
+    "ASTAXES_{}:STCONTROL-BJOGFWD": "JogFwd",
+    "ASTAXES_{}:STCONTROL-BJOGBWD": "JogBwd",
+    "ASTAXES_{}:STCONTROL-ECOMMAND": None,
+    "ASTAXES_{}:STCONTROL-FVELOCITY": None,
+    "ASTAXES_{}:STCONTROL-FJOGVELOCITY": "JogVelocity",
+    "ASTAXES_{}:STCONTROL-FACCELERATION": None,
+    "ASTAXES_{}:STCONTROL-FDECELERATION": None,
+    "ASTAXES_{}:STCONTROL-FPOSITION": None,
+    "ASTAXES_{}:STSTATUS-BENABLED": None,
+    "ASTAXES_{}:STSTATUS-BBUSY": None,
+    "ASTAXES_{}:STSTATUS-BDONE": None,
+    "ASTAXES_{}:STSTATUS-BHOMED": None,
+    "ASTAXES_{}:STSTATUS-BMOVING": None,
+    "ASTAXES_{}:STSTATUS-BMOVINGFORWARD": "MovingForward",
+    "ASTAXES_{}:STSTATUS-BMOVINGBACKWARD": "MovingBackward",
+    "ASTAXES_{}:STSTATUS-BFWENABLED": "FwEnabled",
+    "ASTAXES_{}:STSTATUS-BBWENABLED": "BwEnabled",
+    "ASTAXES_{}:STSTATUS-FACTPOSITION": "ActPosition",
+    "ASTAXES_{}:STSTATUS-FACTVELOCITY": "ActVelocity",
+    "ASTAXES_{}:STSTATUS-BERROR": None,
+    "ASTAXES_{}:STSTATUS-NERRORID": "ErrorID",
 }
