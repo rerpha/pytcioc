@@ -8,63 +8,65 @@ from constants import AXIS_STRUCT
 pvdb = {}
 
 
-# class myDriver(Driver):
-#     def __init__(self, plc):
-#         Driver.__init__(
-#             self,
-#         )
-#         self.tid = None
-#         self.plc = plc
-#         # todo start a thread here that stores the pv values by either:
-#         # - setting up callbacks for each read pv OR
-#         # - polling every 0.5s with a "multiple ads var" query (CANNOT BE DONE CURRENTLY, PYADS ONLY ACCEPTS READMULT BY NAME NOT ADDRESS
-#         # either of the above would be more efficient than polling every ADS var individually
-#
-#     def read(self, reason):
-#         address, indexgrp, plctype = get_index_and_address(pvdb, reason)
-#         try:
-#             var = self._plc_read(address, indexgrp, plctype)
-#             if var is not None:
-#                 return var
-#             else:
-#                 logging.error(f"no value received for {reason}: {var}")
-#         except pyads.ADSError as e:
-#             logging.error(e)
-#             return 0
-#
-#     def _plc_read(self, address, indexgrp, plctype):
-#         return self.plc.read(indexgrp, address, plc_datatype=plctype)
-#
-#     def write(self, reason, value):
-#         status = True
-#         # take proper actions
-#         pv_name = reason
-#         if not self.tid:
-#             self.tid = threading.Thread(
-#                 target=self.write_to_beckhoff,
-#                 args=(
-#                     pv_name,
-#                     value,
-#                 ),
-#             )
-#             self.tid.start()
-#         else:
-#             status = False
-#         # store the values
-#         if status:
-#             self.setParam(reason, value)
-#         return status
-#
-#     def write_to_beckhoff(self, pv_name, ads_value):
-#         self.updatePVs()
-#         # run shell
-#         try:
-#             address, indexgrp, plctype = get_index_and_address(pvdb, pv_name)
-#             self.plc.write(indexgrp, address, ads_value, plctype)
-#         except pyads.ADSError as e:
-#             logging.error(e)
-#         self.updatePVs()
-#         self.tid = None
+class myDriver(Driver):
+    def __init__(self, plc):
+        Driver.__init__(
+            self,
+        )
+        self.tid = None
+        self.plc = plc
+        # todo start a thread here that stores the pv values by either:
+        # - setting up callbacks for each read pv OR
+        # - polling every 0.5s with a "multiple ads var" query (CANNOT BE DONE CURRENTLY, PYADS ONLY ACCEPTS READMULT BY NAME NOT ADDRESS
+        # either of the above would be more efficient than polling every ADS var individually
+
+    def read(self, reason):
+        try:
+            pv = pvdb[reason]
+            adstype = pv["adstype"]
+            adsname = pv["adsvar"]
+            var = self.plc.read_by_name(adsname, plc_datatype=adstype)
+            if var is not None:
+                return var
+            else:
+                logging.error(f"no value received for {reason}: {var}")
+        except pyads.ADSError as e:
+            logging.error(e)
+            return 0
+
+
+    def write(self, reason, value):
+        status = True
+        # take proper actions
+        pv_name = reason
+        if not self.tid:
+            self.tid = threading.Thread(
+                target=self.write_to_beckhoff,
+                args=(
+                    pv_name,
+                    value,
+                ),
+            )
+            self.tid.start()
+        else:
+            status = False
+        # store the values
+        if status:
+            self.setParam(reason, value)
+        return status
+
+    def write_to_beckhoff(self, pv_name, ads_value):
+        self.updatePVs()
+        # run shell
+        try:
+            pv = pvdb[pv_name]
+            adstype = pv["adstype"]
+            adsname = pv["adsvar"]
+            self.plc.write_by_name(adsname, ads_value, adstype)
+        except pyads.ADSError as e:
+            logging.error(e)
+        self.updatePVs()
+        self.tid = None
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -93,9 +95,10 @@ for i in range(1, axes_num + 1):
         full = f"GVL.astAxes[{i}].{first}.{second}"
 
         if second_first_char == "e":
+            # TODO: get enums working
             enums.append(full)
-            val = plc.get_symbol(full, plc_datatype=pyads.PLCTYPE_INT)
-            symbols[full_pv_name] = val
+            # val = plc.get_symbol(full, plc_datatype=pyads.PLCTYPE_INT, auto_update=True)
+            # symbols[full_pv_name] = val
         else:
             try:
                 val = plc.get_symbol(full, auto_update=True)
@@ -113,20 +116,19 @@ for i in range(1, axes_num + 1):
 #     print(f"{key} is {ads_val}")
 
 generate_pvdb(pvdb, symbols, enums)
-#
-# for i in AXIS_STRUCT:
-#
+print(pvdb)
+
 # # todo we should do this to allow this to work alongside tcioc using
 # #  accesssecurity or a shared channelaccess
 # #  https://github.com/ISISComputingGroup/EPICS-refl/blob/master/reflectometry_server.py
-# server = SimpleServer()
-# prefix = ""  # blank, as the prefix is already burned into the pv name by tcioc
-# server.createPV(prefix, pvdb)
-# logging.info(f"created {len(pvdb)} PVs:")
-# for pv in pvdb.keys():
-#     logging.info(pv)
-# # driver = myDriver(plc)
-#
-# # process CA transactions
-# while True:
-#     server.process(0.1)
+server = SimpleServer()
+prefix = "TE:NDW1836:"  # blank, as the prefix is already burned into the pv name by tcioc
+server.createPV(prefix, pvdb)
+logging.info(f"created {len(pvdb)} PVs:")
+for pv in pvdb.keys():
+    logging.info(pv)
+driver = myDriver(plc)
+
+# process CA transactions
+while True:
+    server.process(0.1)

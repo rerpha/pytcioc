@@ -16,7 +16,7 @@ def generate_pvdb(pvdb: Dict, symbols, enums: List[str]):
         if ads_type in [pyads.PLCTYPE_INT, pyads.PLCTYPE_BOOL]:
             pcaspy_dtype = "int"
         else:
-            pcaspy_dtype = "ao"
+            pcaspy_dtype = "float"
 
         pvdb[pvname] = {
             "type": pcaspy_dtype,
