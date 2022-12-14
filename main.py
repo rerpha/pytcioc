@@ -13,7 +13,6 @@ class myDriver(Driver):
         Driver.__init__(
             self,
         )
-        self.tid = None
         self.plc = plc
         # todo start a thread here that stores the pv values by either:
         # - setting up callbacks for each read pv OR
@@ -21,11 +20,17 @@ class myDriver(Driver):
         # either of the above would be more efficient than polling every ADS var individually
 
     def read(self, reason):
+        # print(f"got read for {reason}")
         try:
             pv = pvdb[reason]
             adstype = pv["adstype"]
             adsname = pv["adsvar"]
-            var = self.plc.read_by_name(adsname, plc_datatype=adstype)
+            symbol = pv["symbol"]
+            if symbol is not None:
+                var = symbol.read()
+            else:
+                # enum, try and read int instead
+                var = self.plc.read_by_name(adsname, plc_datatype=pyads.PLCTYPE_INT)
             if var is not None:
                 return var
             else:
@@ -34,39 +39,31 @@ class myDriver(Driver):
             logging.error(e)
             return 0
 
-
     def write(self, reason, value):
+        print(f"got write for {reason} val {value}")
         status = True
         # take proper actions
         pv_name = reason
-        if not self.tid:
-            self.tid = threading.Thread(
-                target=self.write_to_beckhoff,
-                args=(
-                    pv_name,
-                    value,
-                ),
-            )
-            self.tid.start()
-        else:
-            status = False
-        # store the values
-        if status:
-            self.setParam(reason, value)
-        return status
-
-    def write_to_beckhoff(self, pv_name, ads_value):
         self.updatePVs()
         # run shell
         try:
             pv = pvdb[pv_name]
             adstype = pv["adstype"]
             adsname = pv["adsvar"]
-            self.plc.write_by_name(adsname, ads_value, adstype)
+            symbol = pv["symbol"]
+            if symbol is not None:
+                symbol.write(value)
+            else:
+                self.plc.write_by_name(adsname, value, plc_datatype=pyads.PLCTYPE_INT)
+            print(f"wrote {value} to {adsname}")
         except pyads.ADSError as e:
             logging.error(e)
+            status = False
         self.updatePVs()
-        self.tid = None
+        # store the values
+        if status:
+            self.setParam(reason, value)
+        return status
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -76,9 +73,8 @@ plc.open()
 axes_num = plc.read_by_name("GVL_APP.nAXIS_NUM")  # TODO: make this a PV
 logging.info(f"number of axes: {axes_num}")
 
-
 symbols = {}
-enums = []
+enums = {}
 for i in range(1, axes_num + 1):
     for var, adsaddr in AXIS_STRUCT.items():
         full_pv_name = "TC_01:" + var.format(i)
@@ -93,36 +89,26 @@ for i in range(1, axes_num + 1):
             # first char and converting to title case
             second = second_first_char + split_by_dot[1][1:].title()
         full = f"GVL.astAxes[{i}].{first}.{second}"
-
         if second_first_char == "e":
-            # TODO: get enums working
-            enums.append(full)
-            # val = plc.get_symbol(full, plc_datatype=pyads.PLCTYPE_INT, auto_update=True)
-            # symbols[full_pv_name] = val
+            enums[full_pv_name] = full
         else:
             try:
                 val = plc.get_symbol(full, auto_update=True)
                 symbols[full_pv_name] = val
 
             except Exception as e:
-                enums.append(f"{full} didn't work: {e}")
+                print(f"{full} didn't work: {e}")
 
-# for key, val in symbols.items():
-#     if val.name in enums:
-#         ads_val = plc.read_by_name(val.name, pyads.PLCTYPE_INT)
-#     else:
-#         ads_val = val.read()
-#
-#     print(f"{key} is {ads_val}")
 
 generate_pvdb(pvdb, symbols, enums)
-print(pvdb)
 
 # # todo we should do this to allow this to work alongside tcioc using
 # #  accesssecurity or a shared channelaccess
 # #  https://github.com/ISISComputingGroup/EPICS-refl/blob/master/reflectometry_server.py
 server = SimpleServer()
-prefix = "TE:NDW1836:"  # blank, as the prefix is already burned into the pv name by tcioc
+prefix = (
+    "TE:NDW1836:"  # blank, as the prefix is already burned into the pv name by tcioc
+)
 server.createPV(prefix, pvdb)
 logging.info(f"created {len(pvdb)} PVs:")
 for pv in pvdb.keys():
